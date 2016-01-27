@@ -305,6 +305,9 @@ again:
 		var resp *http.Response
 		resp, err = c.doTimeoutRequest(timer, req)
 		if err != nil {
+			if resp.Body != nil {
+				_ = resp.Body.Close()
+			}
 			return
 		}
 		defer func() {
@@ -483,6 +486,10 @@ func (c *Connection) Call(targetUrl string, p RequestOpts) (resp *http.Response,
 		}
 		req, err = http.NewRequest(p.Operation, URL.String(), reader)
 		if err != nil {
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+
 			return
 		}
 		if p.Headers != nil {
@@ -503,6 +510,10 @@ func (c *Connection) Call(targetUrl string, p RequestOpts) (resp *http.Response,
 		req.Header.Add("X-Auth-Token", authToken)
 		resp, err = c.doTimeoutRequest(timer, req)
 		if err != nil {
+			if resp != nil {
+				_ = resp.Body.Close()
+			}
+
 			if (p.Operation == "HEAD" || p.Operation == "GET") && retries > 0 {
 				retries--
 				continue
