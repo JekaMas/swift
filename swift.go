@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/JekaMas/swift/common"
 )
 
 const (
@@ -59,7 +61,7 @@ const (
 //	import (
 //		"appengine/urlfetch"
 //		"fmt"
-//		"github.com/ncw/swift"
+//		"github.com/JekaMas/swift"
 //	)
 //
 //	func handler(w http.ResponseWriter, r *http.Request) {
@@ -304,18 +306,16 @@ again:
 		timer := time.NewTimer(c.ConnectTimeout)
 		var resp *http.Response
 		resp, err = c.doTimeoutRequest(timer, req)
-		if err != nil {
-			if resp.Body != nil {
-				_ = resp.Body.Close()
-			}
-			return
-		}
 		defer func() {
-			checkClose(resp.Body, &err)
+			common.CheckClose(resp, &err)
 			// Flush the auth connection - we don't want to keep
 			// it open if keepalives were enabled
 			flushKeepaliveConnections(c.Transport)
 		}()
+
+		if err != nil {
+			return
+		}
 		if err = c.parseHeaders(resp, authErrorMap); err != nil {
 			// Try again for a limited number of times on
 			// AuthorizationFailed or BadRequest. This allows us
@@ -486,10 +486,6 @@ func (c *Connection) Call(targetUrl string, p RequestOpts) (resp *http.Response,
 		}
 		req, err = http.NewRequest(p.Operation, URL.String(), reader)
 		if err != nil {
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
-
 			return
 		}
 		if p.Headers != nil {
@@ -510,9 +506,7 @@ func (c *Connection) Call(targetUrl string, p RequestOpts) (resp *http.Response,
 		req.Header.Add("X-Auth-Token", authToken)
 		resp, err = c.doTimeoutRequest(timer, req)
 		if err != nil {
-			if resp != nil {
-				_ = resp.Body.Close()
-			}
+			common.Close(resp)
 
 			if (p.Operation == "HEAD" || p.Operation == "GET") && retries > 0 {
 				retries--
@@ -522,7 +516,7 @@ func (c *Connection) Call(targetUrl string, p RequestOpts) (resp *http.Response,
 		}
 		// Check to see if token has expired
 		if resp.StatusCode == 401 && retries > 0 {
-			_ = resp.Body.Close()
+			common.Close(resp)
 			c.UnAuthenticate()
 			retries--
 		} else {
@@ -531,12 +525,12 @@ func (c *Connection) Call(targetUrl string, p RequestOpts) (resp *http.Response,
 	}
 
 	if err = c.parseHeaders(resp, p.ErrorMap); err != nil {
-		_ = resp.Body.Close()
+		common.Close(resp)
 		return nil, nil, err
 	}
 	headers = readHeaders(resp)
 	if p.NoResponse {
-		err = resp.Body.Close()
+		common.Close(resp)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -578,7 +572,7 @@ func (c *Connection) storage(p RequestOpts) (resp *http.Response, headers Header
 //
 // Closes the response when done
 func readLines(resp *http.Response) (lines []string, err error) {
-	defer checkClose(resp.Body, &err)
+	defer common.CheckClose(resp, &err)
 	reader := bufio.NewReader(resp.Body)
 	buffer := bytes.NewBuffer(make([]byte, 0, 128))
 	var part []byte
@@ -603,7 +597,7 @@ func readLines(resp *http.Response) (lines []string, err error) {
 //
 // Closes the response when done
 func readJson(resp *http.Response, result interface{}) (err error) {
-	defer checkClose(resp.Body, &err)
+	defer common.CheckClose(resp, &err)
 	decoder := json.NewDecoder(resp.Body)
 	return decoder.Decode(result)
 }
@@ -651,6 +645,7 @@ func (c *Connection) ContainerNames(opts *ContainersOpts) ([]string, error) {
 		Headers:    h,
 	})
 	if err != nil {
+		common.Close(resp)
 		return nil, err
 	}
 	lines, err := readLines(resp)
@@ -676,6 +671,7 @@ func (c *Connection) Containers(opts *ContainersOpts) ([]Container, error) {
 		Headers:    h,
 	})
 	if err != nil {
+		common.Close(resp)
 		return nil, err
 	}
 	var containers []Container
@@ -793,6 +789,7 @@ func (c *Connection) ObjectNames(container string, opts *ObjectsOpts) ([]string,
 		Headers:    h,
 	})
 	if err != nil {
+		common.Close(resp)
 		return nil, err
 	}
 	return readLines(resp)
@@ -828,6 +825,7 @@ func (c *Connection) Objects(container string, opts *ObjectsOpts) ([]Object, err
 		Headers:    h,
 	})
 	if err != nil {
+		common.Close(resp)
 		return nil, err
 	}
 	var objects []Object
@@ -980,6 +978,7 @@ func (c *Connection) Account() (info Account, headers Headers, err error) {
 		NoResponse: true,
 	})
 	if err != nil {
+		common.Close(resp)
 		return
 	}
 	// Parse the headers into a dict
@@ -1394,7 +1393,7 @@ func (file *ObjectOpenFile) Length() (int64, error) {
 // required and all the object was read
 func (file *ObjectOpenFile) Close() (err error) {
 	// Close the body at the end
-	defer checkClose(file.resp.Body, &err)
+	defer common.CheckClose(file.resp, &err)
 
 	// If not end of file or seeked then can't check anything
 	if !file.eof || file.seeked {

@@ -30,8 +30,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ncw/swift"
-	"github.com/ncw/swift/swifttest"
+	"github.com/JekaMas/swift"
+	"github.com/JekaMas/swift/swifttest"
 )
 
 var (

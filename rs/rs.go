@@ -5,7 +5,8 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/ncw/swift"
+	"github.com/JekaMas/swift"
+	"github.com/JekaMas/swift/common"
 )
 
 // RsConnection is a RackSpace specific wrapper to the core swift library which
@@ -46,13 +47,14 @@ func (c *RsConnection) ContainerCDNEnable(container string, ttl int) (swift.Head
 		h["X-TTL"] = strconv.Itoa(ttl)
 	}
 
-	_, headers, err := c.manage(swift.RequestOpts{
+	resp, headers, err := c.manage(swift.RequestOpts{
 		Container:  container,
 		Operation:  "PUT",
 		ErrorMap:   swift.ContainerErrorMap,
 		NoResponse: true,
 		Headers:    h,
 	})
+	common.Close(resp)
 	return headers, err
 }
 
@@ -60,24 +62,26 @@ func (c *RsConnection) ContainerCDNEnable(container string, ttl int) (swift.Head
 func (c *RsConnection) ContainerCDNDisable(container string) error {
 	h := swift.Headers{"X-CDN-Enabled": "false"}
 
-	_, _, err := c.manage(swift.RequestOpts{
+	resp, _, err := c.manage(swift.RequestOpts{
 		Container:  container,
 		Operation:  "PUT",
 		ErrorMap:   swift.ContainerErrorMap,
 		NoResponse: true,
 		Headers:    h,
 	})
+	common.Close(resp)
 	return err
 }
 
 // ContainerCDNMeta returns the CDN metadata for a container.
 func (c *RsConnection) ContainerCDNMeta(container string) (swift.Headers, error) {
-	_, headers, err := c.manage(swift.RequestOpts{
+	resp, headers, err := c.manage(swift.RequestOpts{
 		Container:  container,
 		Operation:  "HEAD",
 		ErrorMap:   swift.ContainerErrorMap,
 		NoResponse: true,
 		Headers:    swift.Headers{},
 	})
+	common.Close(resp)
 	return headers, err
 }

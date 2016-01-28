@@ -31,7 +31,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/ncw/swift"
+	"github.com/JekaMas/swift"
 )
 
 const (
